@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/pvskp/tmuxer/pkg/utils"
+	"github.com/pvskp/tmuxer/pkg/tmux"
 )
 
 func main () {
-  output, err := utils.ExecuteCommand("tmux", "list-session")
+  cmd, err := tmux.KillSession("tmuxinator")
   if err != nil {
-    log.Fatalf("Failed to execute command: %v", err)
+    log.Fatal(err)
   }
+  output, err := cmd.Execute()
+  if err != nil {
+    log.Fatal(err)
+  }
+
   fmt.Println(output)
 }
