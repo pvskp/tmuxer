@@ -1,3 +1,7 @@
 package tmux
 
-type Pane struct{}
+type Pane struct {
+	Index       int
+	WindowName  string
+	SessionName string
+}
