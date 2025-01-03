@@ -3,18 +3,17 @@ package tmux
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 )
 
 type Session struct {
 	Id      string
-	Windows []*Window
+	Windows map[string]*Window
 }
 
 func NewSession(name string) (*Session, error) {
-	if name == "" {
-		// let's tmux give the session name
-
+	if name == "" { // let's tmux give the session name
 		cmd := &TmuxCommand{
 			Command: "new-session",
 			Args:    []string{"-d", "-P"},
@@ -59,12 +58,39 @@ func ListSessions() ([]*Session, error) {
 	for _, sessionName := range sessionsStringList {
 		if sessionName != "" {
 			session := &Session{Id: sessionName}
-			session.Windows = session.fetchWindows()
+			session.fetchWindows()
 			sessionsList = append(sessionsList, session)
-			fmt.Printf("Got: %s\n", sessionName)
 		}
 	}
 	return sessionsList, nil
+}
+
+func GetSession(name string) (*Session, error) {
+	sessions, err := ListSessions()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var session *Session
+	for _, v := range sessions {
+		if v.Id == name {
+			session = v
+			break
+		}
+	}
+
+	if session == nil {
+		return nil, fmt.Errorf("The given session does not exists")
+	}
+
+	session.fetchWindows()
+
+	for _, window := range session.Windows {
+		window.fetchPanes()
+	}
+
+	return session, nil
 }
 
 func KillSession(name string) error {
@@ -82,16 +108,50 @@ func KillSession(name string) error {
 	return nil
 }
 
-func (s *Session) Kill() {
-	cmd := &TmuxCommand{
-		Command: "kill-session",
-		Args:    []string{"-t", s.Id},
-	}
-	if _, err := cmd.Execute(); err != nil {
-		log.Fatalf("Failed to kill session: %v", err)
-	}
+func (s *Session) RemoveWindow(windowName string) error {
+  if w, exists := s.Windows[windowName]; exists {
+    if err := w.kill(); err != nil {
+      return err
+    }
+    delete(s.Windows, windowName)
+    return nil
+  }
+  return fmt.Errorf("The given window does not exists on this session")
 }
 
-func (s *Session) fetchWindows() []*Window {
-	return []*Window{}
+func (s *Session) fetchWindows() {
+	cmd := &TmuxCommand{
+		Command: "list-windows",
+		Args:    []string{"-t", s.Id, "-F", "#I:#W"},
+	}
+
+	cmdOutput, err := cmd.Execute()
+
+	if err != nil {
+		log.Fatalf("Failed to list windows: %v\n", err)
+	}
+
+	windowStringList := strings.Split(cmdOutput, "\n")
+
+	windowsList := []*Window{}
+
+	for _, v := range windowStringList {
+		if v != "" {
+			splitOutput := strings.Split(v, ":")
+			index, err := strconv.Atoi(splitOutput[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+			window := &Window{
+				Index:       index,
+				SessionName: s.Id,
+				Name:        splitOutput[1],
+				Panes:       []*Pane{},
+			}
+
+			windowsList = append(windowsList, window)
+		}
+	}
+
+	s.Windows = windowsList
 }
